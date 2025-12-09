@@ -1,5 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const MainApp());
@@ -14,10 +18,25 @@ class MainApp extends StatefulWidget {
 
 class _MainAppState extends State<MainApp> {
   bool isDarkMode = false;
+  late SharedPreferences preferences;
+
+  @override
+  void initState() {
+    super.initState();
+    initSharedPreferences();
+  }
+
+  void initSharedPreferences() async {
+    preferences = await SharedPreferences.getInstance();
+    setState(() {
+      isDarkMode = preferences.getBool('isDarkMode') ?? false;
+    });
+  }
 
   void toggleDarkMode() {
     setState(() {
       isDarkMode = !isDarkMode;
+      preferences.setBool('isDarkMode', isDarkMode);
     });
   }
 
@@ -124,46 +143,82 @@ class WelcomeScreen extends StatelessWidget {
         title: title,
       ),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            Text("Hello", style: Theme.of(context).textTheme.headlineLarge),
-            // SizedBox(height: 16.0),
-            Image.network(
-              "https://images.unsplash.com/photo-1765220066469-54d4efe41ca5?q=80&w=768&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-              loadingBuilder:
-                  (
-                    BuildContext context,
-                    Widget child,
-                    ImageChunkEvent? loadingProgress,
-                  ) {
-                    if (loadingProgress == null) return child;
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              for (int i = 0; i < 1; i++) ExampleRow(),
 
-                    return Center(
-                      child: CircularProgressIndicator(
-                        value: loadingProgress.expectedTotalBytes != null
-                            ? loadingProgress.cumulativeBytesLoaded /
-                                  loadingProgress.expectedTotalBytes!
-                            : null,
-                      ),
-                    );
-                  },
-              errorBuilder: (context, error, stackTrace) {
-                return Center(
-                  child: Text("Sorry, there was an error loading the image"),
-                );
-              },
-            ),
-            // SizedBox(height: 16.0),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pushNamed(context, '/login');
-              },
-              child: const Text("login"),
-            ),
-          ],
+              Image.network(
+                "https://images.unsplash.com/photo-1765220066469-54d4efe41ca5?q=80&w=768&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+                loadingBuilder:
+                    (
+                      BuildContext context,
+                      Widget child,
+                      ImageChunkEvent? loadingProgress,
+                    ) {
+                      if (loadingProgress == null) return child;
+
+                      return Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded /
+                                    loadingProgress.expectedTotalBytes!
+                              : null,
+                        ),
+                      );
+                    },
+                errorBuilder: (context, error, stackTrace) {
+                  return Center(
+                    child: Text("Sorry, there was an error loading the image"),
+                  );
+                },
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/login');
+                },
+                child: const Text("login"),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class ExampleRow extends StatelessWidget {
+  const ExampleRow({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.max,
+      children: [
+        Expanded(
+          flex: 1,
+          child: Container(
+            decoration: BoxDecoration(border: Border.all(color: Colors.black)),
+            child: Text(
+              "Hello",
+              style: Theme.of(context).textTheme.headlineLarge,
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 1,
+          child: Container(
+            decoration: BoxDecoration(border: Border.all(color: Colors.black)),
+            child: Text(
+              "Another Hello",
+              style: Theme.of(context).textTheme.headlineLarge,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -304,7 +359,122 @@ class HomeScreen extends StatelessWidget {
         toggleDarkMode: toggleDarkMode,
         title: title,
       ),
-      body: Center(child: Text("You are logged in!")),
+      body: TodoList(),
+    );
+  }
+}
+
+class TodoList extends StatefulWidget {
+  const TodoList({super.key});
+
+  @override
+  State<TodoList> createState() => _TodoListState();
+}
+
+class Todo {
+  final int userId;
+  final int id;
+  final String title;
+  final bool completed;
+
+  Todo({
+    required this.userId,
+    required this.id,
+    required this.title,
+    required this.completed,
+  });
+}
+
+class _TodoListState extends State<TodoList> {
+  List<Todo> todos = [];
+
+  Future<void> getTodos() async {
+    final response = await http.get(
+      Uri.parse('https://jsonplaceholder.typicode.com/todos'),
+    );
+
+    if (response.statusCode == 200) {
+      dynamic items = jsonDecode(response.body);
+      List<Todo> intermediatTodos = [];
+      items.forEach((item) {
+        intermediatTodos.add(
+          Todo(
+            userId: item['userId'],
+            id: item['id'],
+            title: item['title'],
+            completed: item['completed'],
+          ),
+        );
+      });
+
+      setState(() {
+        todos.clear();
+        todos.addAll([...intermediatTodos]);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+
+        mainAxisSize: MainAxisSize.max,
+        children: [
+          SizedBox(height: 16.0),
+          ElevatedButton(onPressed: getTodos, child: Text("Get todos")),
+          Expanded(
+            child: ListView.separated(
+              itemCount: todos.length,
+              itemBuilder: (context, index) {
+                return Row(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        todos[index].id.toString(),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              todos[index].title,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            Text(
+                              "User ID: ${todos[index].userId}",
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Icon(
+                        size: 16,
+                        todos[index].completed ? Icons.check : Icons.close,
+                        color: todos[index].completed
+                            ? Colors.green
+                            : Colors.red,
+                      ),
+                    ),
+                  ],
+                );
+              },
+              separatorBuilder: (BuildContext context, int index) =>
+                  const Divider(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
